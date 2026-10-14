@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>全球AI顶尖人才谱系关系图</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:100%; height:100%; overflow:hidden; background:#0b0f1a; font-family:-apple-system,"PingFang SC","Helvetica Neue",Arial,sans-serif; }
+  svg { display:block; width:100vw; height:100vh; cursor:grab; }
+  svg:active { cursor:grabbing; }
+  .node { cursor:pointer; }
+  .node circle { stroke:#0b0f1a; stroke-width:1.5px; }
+  .node.comp rect { stroke:#0b0f1a; stroke-width:1.5px; rx:6px; }
+  .nlabel { fill:#dbe4f3; font-size:11px; text-anchor:middle; pointer-events:none; paint-order:stroke; stroke:#0b0f1a; stroke-width:3px; }
+  .clabel { fill-opacity:.85; font-size:15px; font-weight:700; text-anchor:middle; pointer-events:none; paint-order:stroke; stroke:#0b0f1a; stroke-width:4px; }
+  .edge { fill:none; }
+  #hud { position:fixed; top:14px; left:14px; z-index:10; max-width:340px; }
+  .card { background:rgba(15,20,35,.92); border:1px solid rgba(255,255,255,.1); border-radius:10px; padding:12px 14px; color:#e6edf7; backdrop-filter:blur(8px); }
+  h1 { font-size:17px; font-weight:700; }
+  .sub { font-size:11px; color:#94a3b8; margin-top:4px; line-height:1.5; }
+  #search { width:100%; margin-top:8px; padding:6px 9px; border-radius:6px; border:1px solid rgba(255,255,255,.15); background:rgba(255,255,255,.06); color:#fff; font-size:12px; outline:none; }
+  .legend { margin-top:8px; font-size:11px; color:#cbd5e1; line-height:1.9; }
+  .legend .sw { display:inline-block; width:22px; height:0; border-top:3px solid; vertical-align:middle; margin-right:6px; }
+  .legend .dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; vertical-align:middle; }
+  #detail { position:fixed; top:14px; right:14px; z-index:10; width:300px; display:none; }
+  #detail h2 { font-size:15px; } #detail .en { color:#94a3b8; font-size:12px; margin:2px 0 6px; }
+  #detail .clu { font-size:11px; color:#93c5fd; margin-bottom:6px; }
+  #detail .note { font-size:12px; color:#cbd5e1; line-height:1.6; }
+  #detail .rel { font-size:11px; color:#9fb4d0; margin-top:8px; max-height:220px; overflow:auto; line-height:1.7; }
+  #detail .rel b { color:#dbe4f3; font-weight:600; }
+  #x { float:right; cursor:pointer; color:#94a3b8; }
+  .btn { margin-top:8px; margin-right:6px; padding:4px 10px; font-size:11px; border-radius:6px; border:1px solid rgba(255,255,255,.15); background:rgba(255,255,255,.07); color:#dbe4f3; cursor:pointer; }
+  .btn:hover { background:rgba(255,255,255,.14); }
+  #tip { position:fixed; display:none; z-index:20; pointer-events:none; background:rgba(15,20,35,.95); border:1px solid rgba(255,255,255,.15); border-radius:8px; padding:8px 10px; color:#e6edf7; font-size:12px; max-width:280px; }
+  #foot { position:fixed; bottom:10px; left:14px; z-index:10; color:#64748b; font-size:10px; max-width:60vw; line-height:1.5; }
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="card">
+    <h1>全球 AI 顶尖人才谱系图</h1>
+    <div class="sub">学术师承 · 联合创立 · 职业流动 —— 从1956达特茅斯到今天的创业圈。拖拽平移/缩放，点击节点看详情，节点可拖动。</div>
+    <input id="search" placeholder="搜索人物 / 机构…">
+    <div class="legend">
+      <span class="sw" style="border-color:#e2e8f0;border-top-style:solid"></span>师承(博导/博后/mentor)<br>
+      <span class="sw" style="border-color:#c084fc;border-top-style:dotted"></span>班级/本科渊源(如姚班)<br>
+      <span class="sw" style="border-color:#f472b6;border-top-style:dashed"></span>联合创立<br>
+      <span class="sw" style="border-color:#475569;border-top-style:solid"></span>关键任职/流动<br>
+      <span class="sw" style="border-color:#2dd4bf;border-top-style:solid"></span>重大合作/同僚
+    </div>
+    <button class="btn" id="reheat">重新布局</button>
+    <button class="btn" id="fit">全景视图</button>
+  </div>
+</div>
+<div id="detail"><div class="card"><span id="x">✕</span><h2 id="dname"></h2><div class="en" id="den"></div><div class="clu" id="dclu"></div><div class="note" id="dnote"></div><div class="rel" id="drel"></div></div></div>
+<div id="tip"></div>
+<div id="foot">依据公开资料整理；"师承"含博士/博士后/实习指导关系，"流动"仅标注对网络结构有代表性的关键路径。彩色背景为学派/机构聚类，位置为自动布局。截至 2026。</div>
+<svg id="svg"><defs id="defs"></defs><g id="world"><g id="hulls"></g><g id="edges"></g><g id="nodes"></g><g id="clabels"></g></g></svg>
+
+<script>
+// ===================== 数据 =====================
+// cluster: id|名称|颜色|cx|cy
+const CL = `
+roots|学术源头(1956-80s)|#78716c|240|290
+toronto|Hinton·多伦多系|#8b5cf6|580|250
+montreal|Bengio·蒙特利尔系|#a78bfa|920|230
+nyu|LeCun·NYU/Meta系|#3b82f6|1240|250
+europe|欧洲谱系(IDSIA/Oxford/UvA)|#0d9488|1560|250
+deepmind|DeepMind系|#06b6d4|1880|470
+berkeley|UCSD→Berkeley系|#f59e0b|330|640
+stanford|斯坦福系|#e11d48|690|660
+cmu|CMU系|#d97706|990|560
+google|Google Brain/Transformer系|#16a34a|1360|700
+openai|OpenAI系|#6366f1|1690|850
+diaspora|海外AI创业圈|#db2777|2120|850
+hw|NVIDIA/芯片系|#65a30d|1070|960
+msra|微软亚研院系|#0ea5e9|280|1080
+tsinghua|清华系|#b91c1c|660|1130
+mmlab|港中文MMLab·商汤系|#9f1239|1010|1220
+china_oth|其他华人谱系|#a16207|1370|1210
+china_co|中国AI创业圈|#ea580c|1800|1190`.trim().split("\n").map(l=>{const p=l.split("|");return{id:p[0],name:p[1],color:p[2],cx:+p[3],cy:+p[4]};});
+CL.forEach(c=>{c.cx=1300+(c.cx-1300)*1.22;c.cy=780+(c.cy-780)*1.18;});
+const CLM = Object.fromEntries(CL.map(c=>[c.id,c]));
+
+// node: id|中文名|英文名|cluster|重要性1-3|简介  (公司英文名留空)
+const ND = `
+mccarthy|麦卡锡|John McCarthy|roots|2|AI之父：1956达特茅斯会议发起人、LISP语言、创立斯坦福AI实验室
+minsky|明斯基|Marvin Minsky|roots|2|MIT AI实验室联合创始人，感知机批判间接引发第一次AI寒冬
+newellsimon|纽厄尔&司马贺|Newell & Simon|roots|1|CMU，逻辑理论家/通用问题求解器；司马贺获图灵奖+诺贝尔经济学奖
+rosenblatt|罗森布拉特|Frank Rosenblatt|roots|1|1957年发明感知机，神经网络思想源头
+hopfield|霍普菲尔德|John Hopfield|roots|1|Hopfield网络，2024诺贝尔物理学奖(与Hinton共享)
+rumelhart|鲁梅尔哈特|David Rumelhart|roots|2|UCSD PDP学派，1986反向传播经典论文，Michael Jordan的导师
+longuet|朗格特-希金斯|C. Longuet-Higgins|roots|1|爱丁堡大学，Hinton的博士导师
+pearl|珀尔|Judea Pearl|roots|1|贝叶斯网络与因果推断，图灵奖2011
+vapnik|瓦普尼克|Vladimir Vapnik|roots|1|SVM/VC维，AT&T Bell Labs，与LeCun/Bengio同期同楼
+mumford|芒福德|David Mumford|roots|1|菲尔兹奖得主，哈佛/Brown模式理论，朱松纯的导师
+barto|巴托|Andrew Barto|roots|1|UMass，强化学习教父，Sutton的导师
+schmidhuber|施密德胡伯|Jürgen Schmidhuber|europe|2|LSTM之父、IDSIA，"现代AI的另一位教父"
+hochreiter|霍赫赖特|Sepp Hochreiter|europe|1|LSTM第一作者，林茨大学
+graves|格雷夫斯|Alex Graves|europe|1|CTC/神经图灵机，DeepMind→OpenAI
+hutter|胡特|Marcus Hutter|europe|1|AIXI通用智能理论，DeepMind，Shane Legg的导师
+zisserman|齐瑟曼|Andrew Zisserman|europe|1|牛津VGG，计算机视觉宗师
+simonyan|西蒙尼扬|Karén Simonyan|europe|1|VGG一作→AlphaFold→Inflection联创→微软AI
+welling|韦林|Max Welling|europe|1|阿姆斯特丹大学→微软研究院阿姆斯特丹院长
+kingma|金马|Diederik Kingma|europe|1|Adam优化器/VAE，OpenAI→Google
+ghahramani|格拉马尼|Zoubin Ghahramani|europe|1|剑桥教授(Jordan学生)，Uber首席科学家→Google DeepMind
+sutton|萨顿|Rich Sutton|deepmind|1|RL教父、《苦涩的教训》，Alberta→DeepMind，图灵奖2024
+hinton|辛顿|Geoffrey Hinton|toronto|3|深度学习教父，图灵2018+诺奖2024，多伦多大学→Google
+sutskever|苏茨克维|Ilya Sutskever|toronto|2|AlexNet→OpenAI联创/首席科学家→SSI联创
+krizhevsky|克里热夫斯基|Alex Krizhevsky|toronto|1|AlexNet一作→Dessa
+zemel|泽梅尔|Richard Zemel|toronto|1|多伦多大学教授，Hinton学生
+fidler|菲德勒|Sanja Fidler|toronto|1|多伦多大学/NVIDIA研究VP，Zemel学生
+ruslan|萨拉赫丁诺夫|R. Salakhutdinov|toronto|1|CMU教授/Apple AI负责人，杨植麟的导师
+jimmyba|吉米·巴|Jimmy Ba|toronto|1|LayerNorm作者，Hinton学生→xAI联创
+frey|弗雷|Brendan Frey|toronto|1|Deep Genomics创始人
+frosst|弗罗斯特|Nick Frosst|toronto|1|Hinton学生→Cohere联创
+gomez|戈麦斯|Aidan Gomez|toronto|1|Transformer最年轻作者→Cohere CEO
+bengio|本吉奥|Yoshua Bengio|montreal|3|图灵2018，MILA创始人，深度学习三剑客，AI安全旗手
+goodfellow|古德费洛|Ian Goodfellow|montreal|1|GAN之父，OpenAI→Google→Apple→DeepMind
+larochelle|拉罗谢尔|Hugo Larochelle|montreal|1|Google Brain→Google DeepMind研究负责人
+bahdanau|巴达瑙|Dzmitry Bahdanau|montreal|1|注意力机制共同作者→ServiceNow
+cho|赵庆彦|Kyunghyun Cho|montreal|1|GRU/注意力共同作者，NYU→Prescient Design
+courville|库维尔|Aaron Courville|montreal|1|MILA教授
+lecun|杨立昆|Yann LeCun|nyu|3|图灵2018，卷积网络之父，Meta首席AI科学家/FAIR创立者
+zaremba|扎伦巴|Wojciech Zaremba|nyu|1|OpenAI联创，LeCun学生
+koray|卡武库奥卢|Koray Kavukcuoglu|nyu|1|LeCun学生→DeepMind CTO→Google DeepMind CTO
+yarats|亚拉茨|Denis Yarats|nyu|1|LeCun学生，FAIR→Perplexity联创
+fergus|弗格斯|Rob Fergus|nyu|1|NYU教授/FAIR，Zisserman学生
+lample|兰普尔|Guillaume Lample|nyu|1|FAIR Llama负责人→Mistral联创
+lacroix|拉克鲁瓦|Timothée Lacroix|nyu|1|FAIR Llama核心→Mistral联创
+fair|Meta FAIR||nyu|1|LeCun 2013年创立的基础AI研究院，Llama诞生地
+dm|Google DeepMind||deepmind|2|AlphaGo/AlphaFold/Gemini，2014被Google收购
+hassabis|哈萨比斯|Demis Hassabis|deepmind|2|联创/CEO，诺奖2024；UCL神经科学+Gatsby(Peter Dayan)
+legg|莱格|Shane Legg|deepmind|1|联创/首席AGI科学家，Hutter学生
+suleyman|苏莱曼|Mustafa Suleyman|deepmind|1|联创→Inflection CEO→微软AI CEO
+silver|西尔弗|David Silver|deepmind|1|AlphaGo/AlphaZero主导者，Sutton学生
+jumper|江珀|John Jumper|deepmind|1|AlphaFold负责人，诺奖2024
+dayan|达扬|Peter Dayan|deepmind|1|UCL Gatsby主任，TD学习/Helmholtz机奠基人
+precup|普雷卡普|Doina Precup|deepmind|1|McGill教授/DeepMind Montreal负责人，Sutton学生
+mensch|芒什|Arthur Mensch|deepmind|1|DeepMind研究员→Mistral CEO
+jordan|乔丹|Michael I. Jordan|berkeley|3|统计学习泰斗；吴恩达、Ghahramani之师，Bengio博士后导师
+ng|吴恩达|Andrew Ng|berkeley|2|创立Google Brain→百度首席科学家→Coursera/DeepLearning.AI
+abbeel|阿比尔|Pieter Abbeel|berkeley|1|Ng学生，RL/机器人教授→Covariant联创→Amazon
+duan|段岩|Rocky Duan|berkeley|1|Covariant联创，Abbeel学生，早期兼职OpenAI
+chenp|彼得·陈|Peter Chen|berkeley|1|Covariant CEO，Abbeel学生
+levine|莱文|Sergey Levine|berkeley|1|机器人学习教授→Physical Intelligence联创
+finn|芬恩|Chelsea Finn|berkeley|1|Levine学生，斯坦福教授→Physical Intelligence联创
+ichter|伊希特|Brian Ichter|berkeley|1|Levine学生→Physical Intelligence联创
+hausman|豪斯曼|Karol Hausman|berkeley|1|Physical Intelligence联创，曾与Levine合作
+malik|马利克|Jitendra Malik|berkeley|1|视觉泰斗，Efros/Girshick之师
+efros|埃夫罗斯|Alexei Efros|berkeley|1|非参数视觉宗师，Sora与CycleGAN作者之师
+girshick|格希克|Ross Girshick|berkeley|1|R-CNN→FAIR
+zhujy|朱俊彦|Jun-Yan Zhu|berkeley|1|CycleGAN/pix2pix，CMU教授，Efros学生
+brookst|布鲁克斯|Tim Brooks|berkeley|1|Sora主导者，Efros学生
+peebles|皮布尔斯|Bill Peebles|berkeley|1|DiT→Sora联合作者，Efros学生
+isola|伊索拉|Phillip Isola|berkeley|1|pix2pix→OpenAI，曾在Efros组做博后
+stoica|斯托伊卡|Ion Stoica|berkeley|1|Spark/Ray/LMArena背后的教授，Databricks/Anyscale联创
+zaharia|扎哈里亚|Matei Zaharia|berkeley|1|Databricks CTO→MIT教授
+konwinski|康温斯基|Andy Konwinski|berkeley|1|Databricks→Perplexity联创
+nishihara|西原|Robert Nishihara|berkeley|1|Ray→Anyscale联创
+russell|罗素|Stuart Russell|berkeley|1|AIMA教材作者，AI安全/对齐先驱
+xing|邢波|Eric Xing|berkeley|1|Jordan学生，CMU教授→MBZUAI校长
+feifei|李飞飞|Fei-Fei Li|stanford|3|ImageNet之母，斯坦福教授→World Labs CEO
+perona|佩罗纳|Pietro Perona|stanford|1|Caltech教授，李飞飞的博士导师
+karpathy|卡帕西|Andrej Karpathy|stanford|1|OpenAI联创→Tesla AI总监→Eureka Labs
+jiadeng|邓嘉|Jia Deng|stanford|1|普林斯顿教授，ImageNet核心构建者
+russakovsky|鲁萨科夫斯基|Olga Russakovsky|stanford|1|普林斯顿教授
+johnson|约翰逊|Justin Johnson|stanford|1|密歇根教授→World Labs联创
+jimfan|范麟熙|Jim Fan|stanford|1|NVIDIA GEAR/具身智能负责人，李飞飞学生
+manning|曼宁|Christopher Manning|stanford|1|斯坦福NLP宗师
+socher|索赫尔|Richard Socher|stanford|1|Salesforce首席科学家→You.com创始人
+danqi|陈丹琦|Danqi Chen|stanford|1|清华姚班→Manning学生→OpenAI→普林斯顿教授
+ermon|厄尔蒙|Stefano Ermon|stanford|1|扩散模型/分数匹配理论家
+yangsong|宋飏|Yang Song|stanford|1|Score-based扩散模型→OpenAI(Sora/DALL·E)
+demiguo|郭文景|Demi Guo|stanford|1|Pika联创
+chenlin|孟晨琳|Chenlin Meng|stanford|1|Pika联创
+koller|科勒|Daphne Koller|stanford|1|概率图模型宗师→Coursera联创→Insitro CEO
+guestrin|格斯特林|Carlos Guestrin|stanford|1|Koller学生，UW→Apple ML总监→陈天奇的导师
+rajreddy|拉吉·雷迪|Raj Reddy|cmu|1|图灵1994，McCarthy学生，李开复/沈向洋的CMU前辈
+mitchell|米切尔|Tom Mitchell|cmu|1|CMU机器学习系奠基人
+smola|斯莫拉|Alex Smola|cmu|1|CMU→Amazon→Boson AI，李沐的导师
+limu|李沐|Mu Li|cmu|1|MXNet→Amazon首席科学家→Boson AI联创
+tianqi|陈天奇|Tianqi Chen|cmu|1|XGBoost/TVM/MLC，CMU教授，OctoML联创
+kolter|科尔特|Zico Kolter|cmu|1|CMU教授，OpenAI董事会成员
+brain|Google Brain||google|2|2011年吴恩达创立，2017年Transformer诞生地
+jeffdean|杰夫·迪恩|Jeff Dean|google|1|Brain负责人→Google首席科学家
+quocle|夸克·勒|Quoc Le|google|1|seq2seq/AutoML/神经架构搜索，Brain元老
+vaswani|瓦斯瓦尼|Ashish Vaswani|google|1|Transformer一作→Essential AI CEO
+shazeer|沙泽尔|Noam Shazeer|google|1|Transformer作者→Character.AI→28亿美元重回Google
+parmar|帕玛|Niki Parmar|google|1|Transformer作者→Adept→Essential AI
+uszkoreit|乌斯科雷特|Jakob Uszkoreit|google|1|Transformer作者→Inceptive
+jones|琼斯|Llion Jones|google|1|Transformer作者→Sakana AI(东京)
+kaiser|凯泽|Łukasz Kaiser|google|1|Transformer作者→OpenAI GPT-4核心
+polosukhin|波洛苏欣|Illia Polosukhin|google|1|Transformer作者→NEAR Protocol
+davidha|戴维·哈|David Ha|google|1|Brain→Sakana AI联创
+openai_c|OpenAI||openai|3|GPT系列，2015年成立，当今AI风暴中心
+altman|奥特曼|Sam Altman|openai|2|YC掌门→OpenAI CEO，Worldcoin联创
+musk|马斯克|Elon Musk|openai|1|OpenAI联创(2018退出)→xAI创始人
+brockman|布罗克曼|Greg Brockman|openai|1|Stripe前CTO→OpenAI总裁/联创
+radford|拉德福德|Alec Radford|openai|1|GPT/CLIP/Whisper奠基者，独立研究者出身
+schulman|舒尔曼|John Schulman|openai|1|PPO/RLHF之父→Anthropic→Thinking Machines联创
+murati|穆拉蒂|Mira Murati|openai|1|OpenAI前CTO→Thinking Machines CEO
+dario|达里奥·阿莫迪|Dario Amodei|openai|1|研究VP→Anthropic CEO；早年随吴恩达在百度
+daniela|丹妮拉·阿莫迪|Daniela Amodei|openai|1|安全VP→Anthropic总裁
+olah|奥拉|Chris Olah|openai|1|可解释性之父→Anthropic联创
+kaplan|卡普兰|Jared Kaplan|openai|1|缩放定律论文→Anthropic联创
+zoph|佐夫|Barret Zoph|openai|1|OpenAI后训练负责人→Thinking Machines CTO
+anthropic|Anthropic||diaspora|2|OpenAI出走天团创立，Claude
+ssi|SSI||diaspora|1|Ilya创立，专注安全超智能
+xai|xAI||diaspora|1|Musk创立，Grok
+tml|Thinking Machines||diaspora|1|Murati创立，OpenAI系再出走
+pplx|Perplexity||diaspora|1|AI搜索独角兽
+mistral|Mistral AI||diaspora|1|欧洲开源模型之光
+cohere|Cohere||diaspora|1|企业级LLM
+sakana|Sakana AI||diaspora|1|东京，受进化启发的模型
+character|Character.AI||diaspora|1|角色AI，团队并入Google
+essential|Essential AI||diaspora|1|两位Transformer作者创立
+inceptive|Inceptive||diaspora|1|AI设计mRNA药物
+near|NEAR Protocol||diaspora|1|区块链→AI基础设施
+worldlabs|World Labs||diaspora|1|李飞飞的空间智能/世界模型
+pi|Physical Intelligence||diaspora|1|机器人基础模型π0
+covariant|Covariant||diaspora|1|机器人基础模型→团队并入Amazon
+lmarena|LMArena||diaspora|1|Chatbot Arena排行榜背后的公司
+databricks|Databricks||diaspora|1|数据+AI，收购MosaicML
+anyscale|Anyscale||diaspora|1|Ray商业化
+inflection|Inflection/微软AI||diaspora|1|Pi助手→团队并入微软
+pika_c|Pika||diaspora|1|斯坦福宿舍创业的视频生成
+srinivas|斯里尼瓦斯|Aravind Srinivas|diaspora|1|Abbeel学生，OpenAI实习→Perplexity CEO
+mildenhall|米尔登霍尔|Ben Mildenhall|diaspora|1|NeRF一作→World Labs联创
+babuschkin|巴布什金|Igor Babuschkin|diaspora|1|xAI联创(前DeepMind/OpenAI)
+nvidia|NVIDIA||hw|2|GPU帝国，AI军备竞赛最大赢家
+jensen|黄仁勋|Jensen Huang|hw|2|NVIDIA创始人，AI时代最重要的算力/资本节点
+dally|达利|Bill Dally|hw|1|斯坦福教授→NVIDIA首席科学家
+hansong|韩松|Song Han|hw|1|MIT教授、深鉴联创，Dally学生
+keller|凯勒|Jim Keller|hw|1|苹果A系列/AMD Zen/特斯拉FSD芯片→Tenstorrent
+tesla|Tesla AI||hw|1|Autopilot/FSD/Optimus
+wangyu|汪玉|Yu Wang|hw|1|清华NICS实验室，深鉴科技联创
+yaosong|姚颂|Song Yao|hw|1|深鉴CEO→Xilinx→SEE Fund
+chentian|陈天石|Chen Tianshi|hw|1|寒武纪创始人(中科院计算所)
+chenyun|陈云霁|Chen Yunji|hw|1|寒武纪首席科学家
+anima|阿南德库马尔|Anima Anandkumar|hw|1|Caltech教授→NVIDIA ML研究VP
+cambricon|寒武纪||hw|1|AI芯片第一股
+deephi|深鉴科技||hw|1|清华系FPGA公司，2018被Xilinx收购
+msra_c|微软亚洲研究院||msra|2|中国AI"黄埔军校"(1998)，李开复创立
+kaifu|李开复|Kai-Fu Lee|msra|2|MSRA创立者→谷歌中国→创新工场→零一万物
+shum|沈向洋|Harry Shum|msra|1|MSRA院长→微软执行副总裁→港科大校董会主席
+yaqin|张亚勤|Yaqin Zhang|msra|1|MSRA院长→百度总裁→清华AIR院长
+sunjian|孙剑|Jian Sun|msra|1|ResNet作者、旷视首席科学家(2022逝世)，何恺明的mentor
+zhoum|周明|Ming Zhou|msra|1|MSRA NLP首席科学家→澜舟科技
+yao|姚期智|Andrew Yao|tsinghua|2|图灵奖2000，清华姚班/叉院，华人AI宗师
+yinqi|印奇|Qi Yin|tsinghua|1|姚班→旷视CEO
+tangwenbin|唐文斌|Wenbin Tang|tsinghua|1|姚班→旷视联创
+yangmu|杨沐|Mu Yang|tsinghua|1|姚班→旷视联创
+loutiancheng|楼天城|Tiancheng Lou|tsinghua|1|姚班+IOI金牌→小马智行CTO
+tangjie|唐杰|Jie Tang|tsinghua|1|清华KEG实验室→智谱AI首席科学家
+sunmaosong|孙茂松|Maosong Sun|tsinghua|1|清华NLP宗师，刘知远导师
+liuzhiyuan|刘知远|Zhiyuan Liu|tsinghua|1|面壁智能联创
+zhujun|朱军|Jun Zhu|tsinghua|1|清华TSAIL→生数科技联创(Vidu)
+tangxo|汤晓鸥|Xiaoou Tang|mmlab|2|港中文MMLab创始人→商汤(2023逝世)
+xuli|徐立|Li Xu|mmlab|1|商汤CEO，汤晓鸥学生
+wangxiaogang|王晓刚|Xiaogang Wang|mmlab|1|商汤联创/港中文教授
+hekaiming|何恺明|Kaiming He|mmlab|1|ResNet一作→FAIR→MIT教授；汤晓鸥学生+孙剑mentor
+lindahua|林达华|Dahua Lin|mmlab|1|OpenMMLab发起人
+zhoubolei|周博磊|Bolei Zhou|mmlab|1|UCLA教授，汤晓鸥学生
+sensetime|商汤科技||mmlab|1|MMLab体系孵化的CV巨头
+zhusongchun|朱松纯|Song-Chun Zhu|china_oth|1|UCLA→北大/BIGAI院长，Mumford学生
+xiesaining|谢赛宁|Saining Xie|china_oth|1|NYU教授，朱松纯学生
+baixiang|白翔|Xiang Bai|china_oth|1|华科教授，OCR/遥感，朱松纯学生
+huangxt|黄煦涛|Thomas Huang|china_oth|1|UIUC视觉宗师，华人CV之父，桃李满中国AI界
+zhouxi|周曦|Xi Zhou|china_oth|1|云从创始人，黄煦涛学生
+yuille|尤耶|Alan Yuille|china_oth|1|UCLA教授，霍金的博士学生
+zhulong|朱珑|Long Zhu|china_oth|1|依图创始人，Yuille学生
+yangqiang|杨强|Qiang Yang|china_oth|1|港科大→微众银行首席AI官，迁移/联邦学习
+zhengnn|郑南宁|Nanning Zheng|china_oth|1|西安交大院士，孙剑的导师
+yukai|余凯|Kai Yu|china_oth|1|百度IDL创始人→地平线CEO
+megvii|旷视科技||china_co|1|姚班三剑客创立的CV巨头
+yitu|依图科技||china_co|1|朱珑创立
+cloudwalk|云从科技||china_co|1|周曦创立
+pony|小马智行||china_co|1|楼天城联创，自动驾驶上市公司
+horizon|地平线||china_co|1|余凯创立，车载AI芯片
+zhipu|智谱AI||china_co|1|清华KEG系，ChatGLM
+modelbest|面壁智能||china_co|1|清华NLP系，端侧大模型
+shengshu|生数科技||china_co|1|朱军联创，Vidu视频生成
+baichuan|百川智能||china_co|1|王小川创立
+moonshot|月之暗面||china_co|1|Kimi，杨植麟创立
+deepseek|深度求索||china_co|2|DeepSeek震动全球
+minimax|MiniMax||china_co|1|闫俊杰创立
+zeroone|零一万物||china_co|1|李开复创立
+yangzhilin|杨植麟|Zhilin Yang|china_co|1|CMU(Salakhutdinov学生)→Kimi创始人
+wangxiaochuan|王小川|Xiaochuan Wang|china_co|1|搜狗创始人→百川智能
+liangwf|梁文锋|Wenfeng Liang|china_co|1|幻方量化→DeepSeek创始人
+yanjunjie|闫俊杰|Junjie Yan|china_co|1|商汤前VP→MiniMax创始人
+`.trim().split("\n").map(l=>{const p=l.split("|");return{id:p[0],zh:p[1],en:p[2]||"",c:p[3],imp:+p[4],note:p[5]||"",comp:!p[2]};});
+
+// edge: from|to|type|label   type: advise|edu|found|flow|col
+const ED = `
+longuet|hinton|advise|
+rumelhart|hinton|advise|博后合作
+rumelhart|jordan|advise|
+mccarthy|rajreddy|advise|
+barto|sutton|advise|
+sutton|silver|advise|
+sutton|precup|advise|
+hinton|lecun|advise|博后
+hinton|sutskever|advise|
+hinton|krizhevsky|advise|
+hinton|zemel|advise|
+hinton|ruslan|advise|
+hinton|jimmyba|advise|
+hinton|frey|advise|
+hinton|frosst|advise|
+hinton|gomez|advise|指导/实习
+jordan|ng|advise|
+jordan|ghahramani|advise|
+jordan|xing|advise|
+jordan|bengio|advise|博后
+ng|abbeel|advise|
+abbeel|schulman|advise|
+abbeel|duan|advise|
+abbeel|chenp|advise|
+abbeel|srinivas|advise|
+levine|finn|advise|
+levine|ichter|advise|
+malik|efros|advise|
+malik|girshick|advise|
+efros|zhujy|advise|
+efros|brookst|advise|
+efros|peebles|advise|
+efros|isola|advise|博后合作
+bengio|goodfellow|advise|
+bengio|larochelle|advise|
+bengio|bahdanau|advise|
+bengio|courville|advise|
+bengio|cho|advise|博后
+lecun|zaremba|advise|
+lecun|koray|advise|
+lecun|yarats|advise|
+zisserman|simonyan|advise|
+zisserman|fergus|advise|
+schmidhuber|hochreiter|advise|
+schmidhuber|graves|advise|
+hutter|legg|advise|
+welling|kingma|advise|
+perona|feifei|advise|
+feifei|karpathy|advise|
+feifei|jiadeng|advise|
+feifei|russakovsky|advise|
+feifei|johnson|advise|
+feifei|jimfan|advise|
+manning|socher|advise|
+manning|danqi|advise|
+ermon|yangsong|advise|
+ermon|demiguo|advise|
+ermon|chenlin|advise|
+koller|guestrin|advise|
+guestrin|tianqi|advise|
+smola|limu|advise|
+dally|hansong|advise|
+wangyu|yaosong|advise|
+rajreddy|kaifu|advise|
+zhengnn|sunjian|advise|
+sunjian|hekaiming|advise|MSRA mentor
+tangxo|xuli|advise|
+tangxo|wangxiaogang|advise|
+tangxo|hekaiming|advise|
+tangxo|lindahua|advise|
+tangxo|zhoubolei|advise|
+mumford|zhusongchun|advise|
+zhusongchun|xiesaining|advise|
+zhusongchun|baixiang|advise|
+huangxt|zhouxi|advise|
+yuille|zhulong|advise|
+ruslan|yangzhilin|advise|
+sunmaosong|liuzhiyuan|advise|
+yao|yinqi|edu|姚班
+yao|tangwenbin|edu|姚班
+yao|yangmu|edu|姚班
+yao|loutiancheng|edu|姚班
+yao|danqi|edu|姚班
+hopfield|hinton|col|诺奖2024共享
+lecun|bengio|col|Bell Labs同僚
+vapnik|lecun|col|Bell Labs
+hinton|dayan|col|Helmholtz机
+sutton|dayan|col|TD学习
+rajreddy|shum|col|CMU渊源
+sutskever|openai_c|found|
+altman|openai_c|found|
+musk|openai_c|found|
+brockman|openai_c|found|
+zaremba|openai_c|found|
+karpathy|openai_c|found|
+hassabis|dm|found|
+legg|dm|found|
+suleyman|dm|found|
+ng|brain|found|
+lecun|fair|found|
+dario|anthropic|found|
+daniela|anthropic|found|
+olah|anthropic|found|
+kaplan|anthropic|found|
+sutskever|ssi|found|
+musk|xai|found|
+jimmyba|xai|found|
+babuschkin|xai|found|
+murati|tml|found|
+zoph|tml|found|
+schulman|tml|found|
+srinivas|pplx|found|
+yarats|pplx|found|
+konwinski|pplx|found|
+gomez|cohere|found|
+frosst|cohere|found|
+mensch|mistral|found|
+lample|mistral|found|
+lacroix|mistral|found|
+jones|sakana|found|
+davidha|sakana|found|
+shazeer|character|found|
+vaswani|essential|found|
+parmar|essential|found|
+uszkoreit|inceptive|found|
+polosukhin|near|found|
+feifei|worldlabs|found|
+johnson|worldlabs|found|
+mildenhall|worldlabs|found|
+levine|pi|found|
+finn|pi|found|
+ichter|pi|found|
+hausman|pi|found|
+abbeel|covariant|found|
+duan|covariant|found|
+chenp|covariant|found|
+stoica|databricks|found|
+zaharia|databricks|found|
+konwinski|databricks|found|
+stoica|anyscale|found|
+nishihara|anyscale|found|
+stoica|lmarena|found|
+suleyman|inflection|found|
+simonyan|inflection|found|
+jensen|nvidia|found|
+wangyu|deephi|found|
+yaosong|deephi|found|
+hansong|deephi|found|
+chentian|cambricon|found|
+chenyun|cambricon|found|
+kaifu|msra_c|found|
+kaifu|zeroone|found|
+tangxo|sensetime|found|
+xuli|sensetime|found|
+wangxiaogang|sensetime|found|
+yinqi|megvii|found|
+tangwenbin|megvii|found|
+yangmu|megvii|found|
+zhulong|yitu|found|
+zhouxi|cloudwalk|found|
+loutiancheng|pony|found|
+yukai|horizon|found|
+tangjie|zhipu|found|
+liuzhiyuan|modelbest|found|
+zhujun|shengshu|found|
+wangxiaochuan|baichuan|found|
+yangzhilin|moonshot|found|
+liangwf|deepseek|found|
+yanjunjie|minimax|found|
+demiguo|pika_c|found|
+chenlin|pika_c|found|
+ng|dario|flow|招募至百度
+openai_c|anthropic|flow|核心团队出走
+kaiser|openai_c|flow|加入
+zoph|openai_c|flow|曾任后训练负责人
+jeffdean|brain|flow|负责人
+koray|dm|flow|加入→CTO
+graves|dm|flow|早期加入
+hekaiming|fair|flow|FAIR→MIT
+sunjian|msra_c|flow|MSRA→旷视
+sunjian|megvii|flow|首席科学家
+yanjunjie|sensetime|flow|曾任VP
+karpathy|tesla|flow|AI总监
+keller|tesla|flow|FSD芯片
+dally|nvidia|flow|首席科学家
+fidler|nvidia|flow|研究VP
+jimfan|nvidia|flow|GEAR负责人
+anima|nvidia|flow|研究VP
+shum|msra_c|flow|院长
+yaqin|msra_c|flow|院长
+`.trim().split("\n").map(l=>{const p=l.split("|");return{a:p[0],b:p[1],t:p[2],lb:p[3]||""};});
+
+// ===================== 构建 =====================
+const nodes = ND.map(d=>{const c=CLM[d.c];return{...d,x:c.cx+(Math.random()-0.5)*160,y:c.cy+(Math.random()-0.5)*160,vx:0,vy:0,fx:null,fy:null,r:d.imp*4+7+(d.comp?3:0)};});
+const NM = Object.fromEntries(nodes.map(n=>[n.id,n]));
+const edges = ED.map(e=>({...e,A:NM[e.a],B:NM[e.b]})).filter(e=>e.A&&e.B);
+nodes.forEach(n=>n.deg=edges.filter(e=>e.A===n||e.B===n).length);
+
+const NS="http://www.w3.org/2000/svg";
+const svg=document.getElementById("svg"),world=document.getElementById("world"),
+  gH=document.getElementById("hulls"),gE=document.getElementById("edges"),gN=document.getElementById("nodes"),gC=document.getElementById("clabels");
+const ET={advise:{c:"#e2e8f0",w:1.6,dash:null,len:95,s:.10,arr:true},
+  edu:{c:"#c084fc",w:1.3,dash:"2 4",len:115,s:.05,arr:true},
+  found:{c:"#f472b6",w:1.5,dash:"6 4",len:105,s:.07,arr:true},
+  flow:{c:"#475569",w:1.1,dash:null,len:135,s:.045,arr:true},
+  col:{c:"#2dd4bf",w:1.2,dash:null,len:170,s:.03,arr:false}};
+
+// arrow markers
+const defs=document.getElementById("defs");
+for(const k in ET){const m=document.createElementNS(NS,"marker");
+  m.setAttribute("id","arw_"+k);m.setAttribute("viewBox","0 0 8 8");m.setAttribute("refX","7");m.setAttribute("refY","4");
+  m.setAttribute("markerWidth","5");m.setAttribute("markerHeight","5");m.setAttribute("orient","auto");
+  const p=document.createElementNS(NS,"path");p.setAttribute("d","M0,0L8,4L0,8Z");p.setAttribute("fill",ET[k].c);p.setAttribute("fill-opacity",".8");
+  m.appendChild(p);defs.appendChild(m);}
+
+// edges svg
+const eEls=edges.map(e=>{const l=document.createElementNS(NS,"path");const st=ET[e.t];
+  l.setAttribute("class","edge");l.setAttribute("stroke",st.c);l.setAttribute("stroke-width",st.w);
+  l.setAttribute("stroke-opacity",".55");if(st.dash)l.setAttribute("stroke-dasharray",st.dash);
+  if(st.arr)l.setAttribute("marker-end",`url(#arw_${e.t})`);
+  l.dataset.a=e.A.id;l.dataset.b=e.B.id;gE.appendChild(l);return l;});
+
+// cluster hulls + labels
+const hullEls={},clabEls={};
+CL.forEach(c=>{const h=document.createElementNS(NS,"ellipse");
+  h.setAttribute("fill",c.color);h.setAttribute("fill-opacity",".055");h.setAttribute("stroke",c.color);h.setAttribute("stroke-opacity",".18");
+  gH.appendChild(h);hullEls[c.id]=h;
+  const t=document.createElementNS(NS,"text");t.setAttribute("class","clabel");t.setAttribute("fill",c.color);t.textContent=c.name;
+  gC.appendChild(t);clabEls[c.id]=t;});
+
+// nodes svg
+const nEls={};
+nodes.forEach(n=>{const g=document.createElementNS(NS,"g");g.setAttribute("class","node"+(n.comp?" comp":""));
+  const col=CLM[n.c].color;
+  if(n.comp){const r=document.createElementNS(NS,"rect");r.setAttribute("x",-n.r);r.setAttribute("y",-n.r);
+    r.setAttribute("width",n.r*2);r.setAttribute("height",n.r*2);r.setAttribute("rx",5);
+    r.setAttribute("fill",col);r.setAttribute("fill-opacity",".92");g.appendChild(r);}
+  else{const ci=document.createElementNS(NS,"circle");ci.setAttribute("r",n.r);
+    ci.setAttribute("fill",col);g.appendChild(ci);}
+  if(n.imp>=3){const ring=document.createElementNS(NS,"circle");ring.setAttribute("r",n.r+3.5);
+    ring.setAttribute("fill","none");ring.setAttribute("stroke","#fbbf24");ring.setAttribute("stroke-width","1.5");ring.setAttribute("opacity",".9");g.appendChild(ring);}
+  const t=document.createElementNS(NS,"text");t.setAttribute("class","nlabel");
+  t.setAttribute("y",n.r+12);t.textContent=n.zh;g.appendChild(t);
+  g.dataset.id=n.id;
+  g.addEventListener("pointerdown",e=>{e.stopPropagation();dragN=n;});
+  g.addEventListener("mouseenter",e=>showTip(n,e));
+  g.addEventListener("mousemove",e=>moveTip(e));
+  g.addEventListener("mouseleave",hideTip);
+  g.addEventListener("click",e=>{e.stopPropagation();showDetail(n);hilite(n);});
+  gN.appendChild(g);nEls[n.id]={g,circle:g.querySelector("circle,rect"),text:t};});
+
+// ===================== 力导布局 =====================
+let alpha=1;
+function step(){
+  if(alpha<0.015)return;
+  alpha*=0.9965;
+  // springs
+  for(const e of edges){const s=ET[e.t];let dx=e.B.x-e.A.x,dy=e.B.y-e.A.y;
+    let d=Math.sqrt(dx*dx+dy*dy)||1;
+    const len=s.len*(e.A.c!==e.B.c?2.0:1);const f=(d-len)*s.s*alpha;
+    dx/=d;dy/=d;
+    if(e.A.fx===null){e.A.vx+=dx*f;e.A.vy+=dy*f;}
+    if(e.B.fx===null){e.B.vx-=dx*f;e.B.vy-=dy*f;}}
+  // repulsion + collision
+  for(let i=0;i<nodes.length;i++){const a=nodes[i];
+    for(let j=i+1;j<nodes.length;j++){const b=nodes[j];
+      let dx=b.x-a.x,dy=b.y-a.y;let d2=dx*dx+dy*dy;if(d2>150000)continue;
+      let d=Math.sqrt(d2)||1;const f=1500/d2*alpha;
+      dx/=d;dy/=d;
+      const min=a.r+b.r+20;
+      let cf=0;if(d<min)cf=(min-d)*0.12;
+      const tot=f+cf;
+      if(a.fx===null){a.vx-=dx*tot;a.vy-=dy*tot;}
+      if(b.fx===null){b.vx+=dx*tot;b.vy+=dy*tot;}}}
+  // cluster gravity + centering
+  for(const n of nodes){const c=CLM[n.c];
+    n.vx+=(c.cx-n.x)*0.028*alpha;n.vy+=(c.cy-n.y)*0.028*alpha;
+    n.vx+=(1300-n.x)*0.0004;n.vy+=(760-n.y)*0.0004;
+    if(n.fx!==null){n.x=n.fx;n.y=n.fy;n.vx=0;n.vy=0;}
+    else{n.vx*=0.82;n.vy*=0.82;n.x+=n.vx;n.y+=n.vy;}}
+  draw();
+}
+function draw(){
+  // hulls
+  for(const c of CL){let cx=0,cy=0,k=0;
+    for(const n of nodes)if(n.c===c.id){cx+=n.x;cy+=n.y;k++;}
+    if(!k)continue;cx/=k;cy/=k;
+    let rx=60,ry=60;
+    for(const n of nodes)if(n.c===c.id){rx=Math.max(rx,Math.abs(n.x-cx)+n.r+46);ry=Math.max(ry,Math.abs(n.y-cy)+n.r+40);}
+    const h=hullEls[c.id];h.setAttribute("cx",cx);h.setAttribute("cy",cy);h.setAttribute("rx",rx*1.05);h.setAttribute("ry",ry*1.08);
+    const t=clabEls[c.id];t.setAttribute("x",cx);t.setAttribute("y",cy-ry*1.08-8);}
+  // edges
+  edges.forEach((e,i)=>{const l=eEls[i];
+    const dx=e.B.x-e.A.x,dy=e.B.y-e.A.y;const d=Math.sqrt(dx*dx+dy*dy)||1;
+    const mx=(e.A.x+e.B.x)/2-dy*0.12,my=(e.A.y+e.B.y)/2+dx*0.12;
+    const tx=e.B.x-dx/d*(e.B.r+3),ty=e.B.y-dy/d*(e.B.r+3);
+    l.setAttribute("d",`M${e.A.x},${e.A.y}Q${mx},${my} ${tx},${ty}`);});
+  // nodes
+  for(const n of nodes){const g=nEls[n.id].g;g.setAttribute("transform",`translate(${n.x},${n.y})`);}
+}
+
+// ===================== 视图/交互 =====================
+let tx=0,ty=0,sc=1;
+function applyT(){world.setAttribute("transform",`translate(${tx},${ty}) scale(${sc})`);}
+function fit(maxSc){const w=innerWidth,h=innerHeight;
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+  nodes.forEach(n=>{x0=Math.min(x0,n.x-160);y0=Math.min(y0,n.y-120);x1=Math.max(x1,n.x+160);y1=Math.max(y1,n.y+120);});
+  sc=Math.min(w/(x1-x0),h/(y1-y0),maxSc||0.85);
+  tx=(w-(x1-x0)*sc)/2-x0*sc;ty=(h-(y1-y0)*sc)/2-y0*sc;applyT();}
+let dragN=null,panning=false,lx=0,ly=0;
+svg.addEventListener("pointerdown",e=>{panning=true;lx=e.clientX;ly=e.clientY;});
+addEventListener("pointermove",e=>{
+  if(dragN){dragN.fx=(e.clientX-tx)/sc;dragN.fy=(e.clientY-ty)/sc;alpha=Math.max(alpha,.06);}
+  else if(panning){tx+=e.clientX-lx;ty+=e.clientY-ly;lx=e.clientX;ly=e.clientY;applyT();}});
+addEventListener("pointerup",()=>{dragN=null;panning=false;});
+svg.addEventListener("wheel",e=>{e.preventDefault();
+  const k=e.deltaY<0?1.12:0.89;
+  const mx=e.clientX,my=e.clientY;
+  tx=mx-(mx-tx)*k;ty=my-(my-ty)*k;sc*=k;applyT();},{passive:false});
+svg.addEventListener("click",()=>{hideTip();hideDetail();hilite(null);});
+
+const tip=document.getElementById("tip");
+function showTip(n,e){tip.innerHTML=`<b>${n.zh}</b>${n.en?" · "+n.en:""}<br><span style="color:#94a3b8;font-size:11px">${n.note}</span>`;
+  tip.style.display="block";moveTip(e);}
+function moveTip(e){tip.style.left=Math.min(e.clientX+14,innerWidth-300)+"px";tip.style.top=(e.clientY+14)+"px";}
+function hideTip(){tip.style.display="none";}
+
+const det=document.getElementById("detail");
+function showDetail(n){
+  document.getElementById("dname").textContent=n.zh;
+  document.getElementById("den").textContent=n.en;
+  document.getElementById("dclu").textContent=CLM[n.c].name+(n.imp>=3?" · ⭐核心人物":"");
+  document.getElementById("dnote").textContent=n.note;
+  const tName={advise:"师承",edu:"同班",found:"创立",flow:"流动",col:"合作"};
+  const rows=edges.filter(e=>e.A===n||e.B===n).map(e=>{
+    const other=e.A===n?e.B:e.A;
+    const dir=e.A===n?`→ <b>${other.zh}</b>`:`← <b>${other.zh}</b>`;
+    return `<div>[${tName[e.t]}${e.lb?"·"+e.lb:""}] ${dir}</div>`;}).join("");
+  document.getElementById("drel").innerHTML=rows||"<div>无连接</div>";
+  det.style.display="block";}
+function hideDetail(){det.style.display="none";}
+document.getElementById("x").onclick=hideDetail;
+
+function hilite(n){
+  const sel=n?new Set([n.id,...edges.filter(e=>e.A===n).map(e=>e.B.id),...edges.filter(e=>e.B===n).map(e=>e.A.id)]):null;
+  nodes.forEach(m=>{const o=sel?(sel.has(m.id)?1:0.15):1;nEls[m.id].g.setAttribute("opacity",o);});
+  edges.forEach((e,i)=>{eEls[i].setAttribute("stroke-opacity",sel?(sel.has(e.A.id)&&sel.has(e.B.id)?0.9:0.05):0.55);});}
+
+const q=document.getElementById("search");
+q.addEventListener("input",()=>{
+  const v=q.value.trim().toLowerCase();
+  if(!v){nodes.forEach(m=>nEls[m.id].g.setAttribute("opacity",1));return;}
+  nodes.forEach(m=>{const hit=(m.zh+m.en).toLowerCase().includes(v);
+    nEls[m.id].g.setAttribute("opacity",hit?1:0.12);});});
+
+document.getElementById("reheat").onclick=()=>{alpha=1;};
+document.getElementById("fit").onclick=fit;
+
+// export mode: hide interactive controls, settle layout fully, bigger fonts
+const EXPORT=new URLSearchParams(location.search).has("export");
+if(EXPORT){
+  document.getElementById("search").style.display="none";
+  document.querySelectorAll(".btn").forEach(b=>b.style.display="none");
+  document.getElementById("hud").querySelector(".sub").textContent=
+    "学术师承 · 联合创立 · 职业流动 —— 从1956达特茅斯到今天的AI创业圈";
+  const st=document.createElement("style");
+  st.textContent=".nlabel{font-size:15px}.clabel{font-size:20px}";
+  document.head.appendChild(st);
+}
+
+const PRE=EXPORT?1400:400;
+for(let i=0;i<PRE;i++)step();
+fit(EXPORT?2.6:0.85);
+
+if(!EXPORT)(function loop(){step();requestAnimationFrame(loop);})();
+</script>
+</body>
+</html>
